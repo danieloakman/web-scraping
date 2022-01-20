@@ -14,7 +14,7 @@ const GMAPS_LIST_NAME = 'Chicklet places';
   });
   const page = (await browser.pages())[0];
   page.on('console', logPageConsole);
-  await page.waitForNetworkIdle();
+  await page.waitForNetworkIdle({ timeout: 10000 });
   await page.goto('https://www.google.com/maps', { waitUntil: 'networkidle0' });
   await page.click(MENU_BUTTON_SELECTOR);
   await sleep(1e3);
@@ -52,7 +52,10 @@ const GMAPS_LIST_NAME = 'Chicklet places';
     list.push(...places);
     // await sleep(2e3);
   }
-  fs.writeFileSync(join(__dirname, 'output.json'), JSON.stringify(list, null, 2));
+  fs.writeFileSync(
+    join(__dirname, `${GMAPS_LIST_NAME}.csv`),
+    // `Name|Note|Misc\n${list.map(({ name, note, misc }) => `"${name}"|"${note}"|"${misc.join(' - ')}"`).join('\n')}`
+  );
 
   await browser.close();
 })();
