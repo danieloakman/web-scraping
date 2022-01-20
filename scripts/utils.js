@@ -43,3 +43,11 @@ module.exports.clickButtonThatIncludes = function (buttonInnerHTML) {
     }
   }
 };
+
+module.exports.callSafely = function (fn, _this, ...args) {
+  try {
+    return fn.call(_this, ...args);
+  } catch (_) {
+    return null;
+  }
+};
