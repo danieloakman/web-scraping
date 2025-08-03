@@ -1,14 +1,12 @@
 import { APIGatewayProxyEventV2 } from 'aws-lambda';
-import playwright from 'playwright-aws-lambda';
+import { launchBrowser } from '../utils/browser';
 
 const INSTAGRAM_LOCATION_URL = 'https://www.instagram.com/explore/locations';
 
 export async function handler(evt: APIGatewayProxyEventV2) {
-  const browser = await playwright.launchChromium();
+  const browser = await launchBrowser();
   const page = await browser.newPage();
   await page.goto(INSTAGRAM_LOCATION_URL);
-  // await page.waitForLoadState('networkidle');
-  // await page.waitForTimeout(10000);
   const anchorSelectors = 'main ul a[href*="explore/locations"]';
   await page.waitForSelector(anchorSelectors);
   const anchors = await page.$$(anchorSelectors);
