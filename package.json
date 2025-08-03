@@ -24,6 +24,7 @@
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/aws-lambda": "^8.10.152",
     "@types/node": "^24.1.0",
+    "chromium": "^3.0.3",
     "prettier": "^3.6.2"
   }
 }

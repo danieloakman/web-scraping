@@ -14,9 +14,11 @@ async function launchOptions({
 			...options
 		};
 	}
+	// const localChromium: { path: string } = await import('chromium');
 	return {
 		headless,
 		args,
+		// executablePath: localChromium.path,
 		...options
 	};
 }
