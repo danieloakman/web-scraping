@@ -1,40 +1,86 @@
+/* @deprecated script. */
+
 'use strict';
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { join } = require('path');
-const { openChrome, sleep, logPageConsole, clickButtonThatIncludes, callSafely } = require('./utils');
+const { spawn } = require('child_process');
 
 const MENU_BUTTON_SELECTOR = '.nhb85d-zuz9Sc-haAclf';
 const YOUR_PLACES_SELECTOR = ':contains("Your places")'; // '.KY3DLe-settings-list-ibnC6b';
 const GMAPS_LIST_NAME = 'Chicklet places';
 
-function jsonToCSV (placesList) {
-  return `"Name"|"Note"|"Misc"\n${
-    placesList.map(({ name, note, misc }) =>
-      `"${name.trim()}"|"${note.trim().replace(/[\n]/g, '\\n')}"|"${misc.join('\\n')}"`
-    ).join('\n')}
+function jsonToCSV(placesList) {
+  return `"Name"|"Note"|"Misc"\n${placesList
+    .map(({ name, note, misc }) => `"${name.trim()}"|"${note.trim().replace(/[\n]/g, '\\n')}"|"${misc.join('\\n')}"`)
+    .join('\n')}
   `;
-};
+}
 
-function csvToJSON (csv) {
+function csvToJSON(csv) {
   return csv
     .split('\n')
     .slice(1)
-    .map(line => {
-      const [name, note, misc] = line
-        .split('|')
-        .map(str => str.substring(1, str.length - 1).trim())
+    .map((line) => {
+      const [name, note, misc] = line.split('|').map((str) => str.substring(1, str.length - 1).trim());
       return {
         name,
         note: note ? note.replace(/\\n/g, '\n') : '',
-        misc: misc ? misc.split('\\n').map(str => str.trim()): []
+        misc: misc ? misc.split('\\n').map((str) => str.trim()) : [],
       };
     });
 }
 
+function openChrome() {
+  return new Promise((resolve, reject) => {
+    const chrome = spawn('C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', [
+      '--remote-debugging-port=9222',
+    ]);
+    function onData(data) {
+      data = data.toString();
+      if (/listening on .+/.test(data)) {
+        resolve(data.match(/ws.+/)[0]);
+      } else if (/error/.test(data)) {
+        reject(data.stack || data);
+      }
+    }
+    chrome.stdout.on('data', onData);
+    chrome.on('message', onData);
+    chrome.stderr.on('data', onData);
+    chrome.on('error', onData);
+  });
+}
+
+function sleep(ms) {
+  console.log(`Sleeping for ${ms}ms`);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logPageConsole(message) {
+  if (!message.text().includes('ERR_BLOCKED_BY_CLIENT')) console.log(message.text());
+}
+
+function clickButtonThatIncludes(buttonInnerHTML) {
+  const buttons = document.getElementsByTagName('button');
+  for (const button of buttons) {
+    if (button.innerHTML.includes(buttonInnerHTML)) {
+      button.click();
+      break;
+    }
+  }
+}
+
+function callSafely(fn, _this, ...args) {
+  try {
+    return fn.call(_this, ...args);
+  } catch (_) {
+    return null;
+  }
+}
+
 (async () => {
   const browser = await puppeteer.connect({
-    browserWSEndpoint: await openChrome()
+    browserWSEndpoint: await openChrome(),
   });
   const page = (await browser.pages())[0];
   page.on('console', logPageConsole);
@@ -48,13 +94,12 @@ function csvToJSON (csv) {
   await page.evaluate(clickButtonThatIncludes, 'Your places');
   await sleep(3e3);
 
-  await page.evaluate(clickButtonThatIncludes, GMAPS_LIST_NAME)
+  await page.evaluate(clickButtonThatIncludes, GMAPS_LIST_NAME);
   await sleep(3e3);
 
   const numOfPlaces = await page.evaluate(() => {
     for (const h2 of document.querySelectorAll('h2'))
-      if (/Shared.*\d+ *places/.test(h2.textContent))
-        return parseFloat(h2.textContent.match(/\d+/)[0]);
+      if (/Shared.*\d+ *places/.test(h2.textContent)) return parseFloat(h2.textContent.match(/\d+/)[0]);
     console.log('Could not find number of places.');
     return 0;
   });
@@ -62,10 +107,9 @@ function csvToJSON (csv) {
   await page.mouse.click(0, 0);
   const list = [];
   while (true) {
-    for (let i = 0; i < 10; i++)
-      await page.keyboard.press('PageDown');
+    for (let i = 0; i < 10; i++) await page.keyboard.press('PageDown');
     await sleep(3e3);
-    const places = (await page.evaluate(() => {
+    const places = await page.evaluate(() => {
       const callSafely = (fn, _this, ...args) => {
         try {
           return fn(...args);
@@ -76,14 +120,18 @@ function csvToJSON (csv) {
       const places = [];
       for (const place of document.getElementsByClassName('ZQyzS-aVTXAb')) {
         const name = place.getAttribute('aria-label');
-        places.push(callSafely(() => ({
-          name,
-          note: callSafely(() => place.children[2].children[0].children[0].children[0].children[0].children[0].innerHTML),
-          misc: place.children[1].innerText.split('\n').filter(str => str !== name)
-        })));
+        places.push(
+          callSafely(() => ({
+            name,
+            note: callSafely(
+              () => place.children[2].children[0].children[0].children[0].children[0].children[0].innerHTML
+            ),
+            misc: place.children[1].innerText.split('\n').filter((str) => str !== name),
+          }))
+        );
       }
       return places;
-    })); //.filter(a => list.find(b => a.name === b.name) === undefined);
+    }); //.filter(a => list.find(b => a.name === b.name) === undefined);
     // if (places.length % 20 !== 0) {
     //   console.log('Could not find all places.');
     // }

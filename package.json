@@ -1,22 +1,26 @@
 {
-  "name": "puppeteer-bots",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "web-scraping",
+  "version": "0.1.0",
+  "description": "Web scraping",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "sst build --stage prod",
+    "check": "tsc --noEmit",
+    "cleaninstall": "rm -rf node_modules .sst",
+    "deploy": "sst deploy --stage prod",
+    "dev": "sst dev",
+    "format": "prettier --write ./src && eslint --fix ./src",
+    "lint": "prettier --check ./src && eslint ./src",
+    "remove": "sst remove --stage prod"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/danieloakman/puppeteer-bots.git"
-  },
-  "author": "Daniel Oakman",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/danieloakman/puppeteer-bots/issues"
-  },
-  "homepage": "https://github.com/danieloakman/puppeteer-bots#readme",
+  "author": "Daniel Brown",
   "dependencies": {
-    "puppeteer": "^13.0.1"
+    "http-status-codes": "^2.3.0",
+    "playwright-aws-lambda": "^0.11.0",
+    "playwright-core": "^1.54.2",
+    "sst": "^3.17.10"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.152"
   }
 }
