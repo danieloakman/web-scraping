@@ -1,5 +1,6 @@
 import { type Browser, chromium as playwright, type LaunchOptions } from 'playwright-core';
 import chromium from '@sparticuz/chromium';
+import { clamp, once } from '@danoaky/js-utils';
 
 async function launchOptions({
 	args = [],
@@ -38,6 +39,19 @@ export async function launchBrowser(options: LaunchOptions = {}) {
 		}
 	});
 }
+
+export async function launchBrowsers(count: number, options: LaunchOptions) {
+  const browsers = Array.from({ length: clamp(count, 1, Infinity) }, () =>
+    once(async () => playwright.launch(await launchOptions(options))),
+  );
+  return Object.assign(browsers, {
+    [Symbol.asyncDispose]: async () => {
+      await Promise.all(
+        browsers.map((getBrowser) => getBrowser().then((b) => b.close().catch(() => null))),
+      );
+    },
+  });
+};
 
 /**
  * Creates a new page in the browser.
