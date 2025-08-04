@@ -1,5 +1,5 @@
-import { launchBrowser, launchBrowsers, newPage } from '../utils/browser';
-import { lambdaFn } from '../utils/api';
+import { launchBrowser, launchBrowsers, newPage } from '../../utils/browser';
+import { lambdaFn } from '../../utils/api';
 import * as Z from 'zod';
 import Path from 'path';
 import { constant, sleep, type PromiseOrValue } from '@danoaky/js-utils';
@@ -180,4 +180,3 @@ export const api = lambdaFn(
 	}
 );
 export const handler = api.handler;
-export default api.handler;

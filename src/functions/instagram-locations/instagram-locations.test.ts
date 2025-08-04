@@ -1,6 +1,6 @@
 
 import {test, expect} from '@playwright/test'
-import { api } from './instagram-locations';
+import { api } from '.';
 
 test('test', async ({ page }) => {
   await page.goto('https://playwright.dev');

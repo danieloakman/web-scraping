@@ -12,10 +12,21 @@ export function parseBody<T extends Z.ZodTypeAny>(
 	return schema.safeParse(JSON.parse(evt.body));
 }
 
-export function lambdaFn<T extends Z.ZodTypeAny, U extends Promise<unknown>>(
+/** What SST interfaces with. */
+export interface LambdaFnHandler {
+	(evt: APIGatewayProxyEventV2): Promise<{ statusCode: number; body: string }>;
+}
+
+export interface LambdaFn<T extends Z.ZodTypeAny, U> {
+	(body: Z.output<T>): Promise<U>;
+	handler: LambdaFnHandler;
+	bodySchema: T;
+}
+
+export function lambdaFn<T extends Z.ZodTypeAny, U>(
 	bodySchema: T,
-	fn: (body: Z.output<T>) => U
-) {
+	fn: (body: Z.output<T>) => Promise<U>
+): LambdaFn<T, U> {
 	const handler = async (evt: APIGatewayProxyEventV2) => {
 		const body = parseBody(evt, bodySchema);
 		if (!body.success)
@@ -42,5 +53,5 @@ export function lambdaFn<T extends Z.ZodTypeAny, U extends Promise<unknown>>(
 			};
 		}
 	};
-	return { call: fn, handler, bodySchema };
+	return Object.assign(fn, { handler, bodySchema });
 }
