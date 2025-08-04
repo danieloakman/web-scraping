@@ -1,13 +1,13 @@
 import { type Browser, chromium as playwright, type LaunchOptions } from 'playwright-core';
 import chromium from '@sparticuz/chromium';
-import { exec, raise, Result } from '@danoaky/js-utils';
 
 async function launchOptions({
 	args = [],
-	headless = true,
+  headless = true,
 	...options
 }: LaunchOptions = {}): Promise<LaunchOptions> {
-	if (process.env.AWS_EXECUTION_ENV || process.env.SST_DEV) {
+  if (process.env.AWS_EXECUTION_ENV) {
+    // On AWS lambda
 		return {
 			args: [...chromium.args, ...args],
 			executablePath: await chromium.executablePath(),
@@ -15,15 +15,9 @@ async function launchOptions({
 			...options
 		};
   }
-	const { data: executablePath, error } = await exec('which google-chrome')
-		.catch(() => exec('which chromium'))
-		// @ts-expect-error - no types for chromium
-		.catch(() => import('chromium').then((c: { path: string }) => Result.Ok(c.path)));
-	if (error) throw new Error('No browser found');
 	return {
 		headless,
-		args,
-		executablePath,
+    args,
 		...options
 	};
 }
