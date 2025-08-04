@@ -6,3 +6,5 @@ sst-env.d.ts
 
 # env
 .env
+
+test-results

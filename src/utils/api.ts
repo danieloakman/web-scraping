@@ -6,7 +6,7 @@ export function parseBody<T extends Z.ZodTypeAny>(
 	evt: APIGatewayProxyEventV2,
 	schema: T
 ): Z.ZodSafeParseResult<Z.infer<T>> {
-	if (typeof evt.body !== 'string' || !evt.body.length) throw new Error('No body found');
+	if (typeof evt.body !== 'string' || !evt.body.length) return schema.safeParse(evt.body);
 	if (evt.isBase64Encoded)
 		return schema.safeParse(JSON.parse(Buffer.from(evt.body, 'base64').toString('utf-8')));
 	return schema.safeParse(JSON.parse(evt.body));
@@ -16,7 +16,7 @@ export function lambdaFn<T extends Z.ZodTypeAny, U extends Promise<unknown>>(
 	bodySchema: T,
 	fn: (body: Z.output<T>) => U
 ) {
-	return async (evt: APIGatewayProxyEventV2) => {
+	const handler = async (evt: APIGatewayProxyEventV2) => {
 		const body = parseBody(evt, bodySchema);
 		if (!body.success)
 			return {
@@ -42,4 +42,5 @@ export function lambdaFn<T extends Z.ZodTypeAny, U extends Promise<unknown>>(
 			};
 		}
 	};
+	return { call: fn, handler, bodySchema };
 }

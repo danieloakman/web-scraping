@@ -20,7 +20,9 @@ export default $config({
 			layers: [chromiumLayer],
 			runtime: 'nodejs22.x',
 			environment: {
-				PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+				PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+				PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS: 'true',
+				PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? ''
 			},
 			nodejs: {
 				install: ['playwright-core'],
