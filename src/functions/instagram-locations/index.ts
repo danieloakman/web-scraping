@@ -9,8 +9,8 @@ import { iter } from 'iteragain';
 
 const INSTAGRAM_LOCATION_URL = 'https://www.instagram.com/explore/locations';
 
-type LocationUrl = [id: string, place: string];
-class Location {
+export type LocationUrl = [id: string, place: string];
+export class Location {
 	/** Indicates the nested level of the location. Countries -> Regions -> Places. */
 	readonly type: 'country' | 'region' | 'place';
 
@@ -86,13 +86,15 @@ async function isOnLoginPage(page: Page) {
 	return url.includes('login');
 }
 
-/** TODO: use this function */
-async function getLocations(browser: Browser, route = ''): Promise<ExtendedIterator<Location>> {
-  await using page = await newPage(browser);
+export async function getLocations(
+	browser: Browser,
+	route = ''
+): Promise<ExtendedIterator<Location>> {
+	await using page = await newPage(browser);
 	const url = Path.join(INSTAGRAM_LOCATION_URL, route);
 	await page.goto(url);
 	while (await clickNavigation(page, 'See more', 'a[href*="page"]')) {
-    await sleep(500);
+		await sleep(500);
 	}
 
 	if (await isOnLoginPage(page)) throw new Error('Login page detected');
@@ -104,55 +106,51 @@ async function getLocations(browser: Browser, route = ''): Promise<ExtendedItera
 	return iter(hrefs)
 		.unique({ iteratee: ([href]) => href })
 		.filterMap(([href, name]) =>
-			href && name
-				? Location.from(href, name, !route ? undefined : url)
-				: null
+			href && name ? Location.from(href, name, !route ? undefined : url) : null
 		);
 }
 
-/** Only scrap places in australia for now, otherwise all else just get up to the region level. */
-// const ALLOWED_COUNTRY_CODES = ['AU'];
-async function getAllLocations(
-  callback: (locations: ExtendedIterator<Location>) => PromiseOrValue<void>,
-  {
-    headless = true,
-    parallelBrowsers = 1,
-    skipUrl = constant(false),
-  }: {
-    headless?: boolean;
-    parallelBrowsers?: number;
-    skipUrl?: (url: string) => PromiseOrValue<boolean>;
-  } = {},
+export async function getAllLocations(
+	callback: (locations: ExtendedIterator<Location>) => PromiseOrValue<void>,
+	{
+		headless = true,
+		parallelBrowsers = 1,
+		regionSearchCountries = []
+	}: {
+		headless?: boolean;
+		parallelBrowsers?: number;
+		/**
+		 * If provided, only regions within the provided countries will be scraped.
+		 * E.g. ['AU', 'NZ'] will only scrape regions within Australia and New Zealand.
+		 */
+		regionSearchCountries?: string[];
+	} = {}
 ) {
-  await using browsers = await launchBrowsers(parallelBrowsers, { headless });
-  const browser0 = await browsers[0]!();
-  const locations = [...(await getLocations(browser0, INSTAGRAM_LOCATION_URL))];
-  await Promise.all(
-    browsers.map(async (getBrowser, browserIdx) => {
-      const browser = await getBrowser();
-      while (locations.length) {
-        const location = locations.pop();
-        if (!location) continue;
-        if (await skipUrl(location.fullUrl)) {
-          console.log(`skipping ${location.fullUrl}`);
-          continue;
-        }
-        console.log(`${locations.length} locations left on the stack`);
-        console.log(`browser[${browserIdx}], goto: ${location.fullUrl}`);
-        const result = await getLocations(browser, location.fullUrl);
-        await callback(
-          result
-          //   .tap((location) => {
-          //   if (
-          //     location.type === 'region' &&
-          //     ALLOWED_COUNTRY_CODES.includes(location.parent?.id ?? '')
-          //   )
-          //     locations.push(location);
-          // }),
-        );
-      }
-    }),
-  );
+	await using browsers = await launchBrowsers(parallelBrowsers, { headless });
+	const browser0 = await browsers[0]!();
+	const locations = [...(await getLocations(browser0, INSTAGRAM_LOCATION_URL))];
+	await Promise.all(
+		browsers.map(async (getBrowser, browserIdx) => {
+			const browser = await getBrowser();
+			while (locations.length) {
+				const location = locations.pop();
+				if (!location) continue;
+				console.log(
+					`stack size: ${locations.length}, browser[${browserIdx}], goto: ${location.fullUrl}`
+				);
+				const result = await getLocations(browser, location.fullUrl);
+				await callback(
+					result.prepend([location]).tap((location) => {
+						if (
+							location.type === 'region' &&
+							regionSearchCountries.includes(location.parent?.id ?? '')
+						)
+							locations.push(location);
+					})
+				);
+			}
+		})
+	);
 }
 
 export const api = lambdaFn(
@@ -164,19 +162,8 @@ export const api = lambdaFn(
 	async (body) => {
 		const { route = '' } = body ?? {};
 		await using browser = await launchBrowser();
-		await using page = await newPage(browser);
-		const url = Path.join(INSTAGRAM_LOCATION_URL, route ?? '');
-		console.debug(url);
-		await page.goto(url);
-		const anchorSelectors = 'main ul a[href*="explore/locations"]';
-		await page.waitForSelector(anchorSelectors);
-		const anchors = await page.$$(anchorSelectors);
-		const links = await Promise.all(
-			anchors.map((anchor) =>
-				Promise.all([anchor.getAttribute('href'), anchor.innerText()] as const)
-			)
-		);
-		return links;
+		const locations = await getLocations(browser, route);
+		return locations.toArray();
 	}
 );
 export const handler = api.handler;
