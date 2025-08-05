@@ -30,10 +30,11 @@ export default $config({
 				}
 			}
 		};
-		const a = new sst.aws.Function('instagram-locations', {
-			handler: 'src/functions/instagram-locations/index.handler',
-			...DEFAULT_FUNCTION_OPTIONS
-		});
+		// Using a local script instead of lambda fn for now:
+		// new sst.aws.Function('instagram-locations', {
+		// 	handler: 'src/functions/instagram-locations/index.handler',
+		// 	...DEFAULT_FUNCTION_OPTIONS
+		// });
 		new sst.aws.Function('webpage', {
 			handler: 'src/functions/webpage/index.handler',
 			...DEFAULT_FUNCTION_OPTIONS
