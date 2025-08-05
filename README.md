@@ -1,3 +1,3 @@
 # Web Scraping
 
-Collection of web-scraping lambda functions and utilies related to that.
+Collection of web-scraping lambda functions, utilies and scripts.
