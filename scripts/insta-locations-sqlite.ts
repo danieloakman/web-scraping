@@ -27,11 +27,11 @@ if (import.meta.main) {
 	} = meow(
 		`
     Usage
-    $ bun run scripts/instagram-location-scrape.ts
+    $ bun run packages/web-scraping/scripts/insta-locations-sqlite.ts
 
     Options
     --output, -o  Output file (default: ./locations.sqlite)
-    --headless, -h  Run in headless mode (default: false)
+    --headless, -H  Run in headless mode (default: false)
     --parallel-browsers, -p  Number of parallel browsers to use (default: 1)
   `,
 		{
@@ -44,7 +44,7 @@ if (import.meta.main) {
 				},
 				headless: {
 					type: 'boolean',
-					shortFlag: 'h',
+					shortFlag: 'H',
 					default: false
 				},
 				parallelBrowsers: {
