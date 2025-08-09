@@ -4,21 +4,21 @@ import { clamp, once } from '@danoaky/js-utils';
 
 async function launchOptions({
 	args = [],
-  headless = true,
+	headless = true,
 	...options
 }: LaunchOptions = {}): Promise<LaunchOptions> {
-  if (process.env.AWS_EXECUTION_ENV) {
-    // On AWS lambda
+	if (process.env.AWS_EXECUTION_ENV) {
+		// On AWS lambda
 		return {
 			args: [...chromium.args, ...args],
 			executablePath: await chromium.executablePath(),
 			headless: true, // Ignore headless option
 			...options
 		};
-  }
+	}
 	return {
 		headless,
-    args,
+		args,
 		...options
 	};
 }
@@ -41,17 +41,17 @@ export async function launchBrowser(options: LaunchOptions = {}) {
 }
 
 export async function launchBrowsers(count: number, options: LaunchOptions) {
-  const browsers = Array.from({ length: clamp(count, 1, Infinity) }, () =>
-    once(async () => playwright.launch(await launchOptions(options))),
-  );
-  return Object.assign(browsers, {
-    [Symbol.asyncDispose]: async () => {
-      await Promise.all(
-        browsers.map((getBrowser) => getBrowser().then((b) => b.close().catch(() => null))),
-      );
-    },
-  });
-};
+	const browsers = Array.from({ length: clamp(count, 1, Infinity) }, () =>
+		once(async () => playwright.launch(await launchOptions(options)))
+	);
+	return Object.assign(browsers, {
+		[Symbol.asyncDispose]: async () => {
+			await Promise.all(
+				browsers.map((getBrowser) => getBrowser().then((b) => b.close().catch(() => null)))
+			);
+		}
+	});
+}
 
 /**
  * Creates a new page in the browser.
