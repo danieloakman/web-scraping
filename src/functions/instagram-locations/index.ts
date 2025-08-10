@@ -73,7 +73,8 @@ export async function getLocations(
 	const url = Path.join(INSTAGRAM_LOCATION_URL, route);
 	await page.goto(url);
 	const linkSelector = 'main li a[href*="explore/locations/"]';
-	await page.waitForSelector(linkSelector);
+
+	await page.waitForSelector(linkSelector).catch(constant(null));
 	while (
 		await page
 			.getByText('See more')
@@ -82,16 +83,13 @@ export async function getLocations(
 			.catch(constant(false))
 	) {
 		console.log(`${page.url()}, clicking see more`);
-		await page
-			.getByText('See more')
-			.click()
-			.catch(constant(null));
+		if (await page.getByText('See more').click().then(constant(false)).catch(constant(true))) break;
 		await sleep(500);
 	}
 
 	if (await isOnLoginPage(page)) throw new Error('Login page detected');
 
-	const links = await page.$$(linkSelector);
+	const links = await page.$$(linkSelector).catch(constant([]));
 	const hrefs = await Promise.all(
 		links.map((link) => link.evaluate((el) => [el.getAttribute('href'), el.textContent] as const))
 	);
