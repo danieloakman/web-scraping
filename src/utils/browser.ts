@@ -40,7 +40,10 @@ export async function launchBrowser(options: LaunchOptions = {}) {
 	});
 }
 
-export async function launchBrowsers(count: number, options: LaunchOptions) {
+export function launchBrowsers(
+	count: number,
+	options: LaunchOptions
+): (() => Promise<Browser>)[] & AsyncDisposable {
 	const browsers = Array.from({ length: clamp(count, 1, Infinity) }, () =>
 		once(async () => playwright.launch(await launchOptions(options)))
 	);
@@ -50,7 +53,7 @@ export async function launchBrowsers(count: number, options: LaunchOptions) {
 				browsers.map((getBrowser) => getBrowser().then((b) => b.close().catch(() => null)))
 			);
 		}
-	});
+	}) as (() => Promise<Browser>)[] & AsyncDisposable;
 }
 
 /**

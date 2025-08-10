@@ -20,12 +20,12 @@
     "@sparticuz/chromium": "^138",
     "http-status-codes": "^2.3.0",
     "iteragain": "^4.1.6",
-    "playwright-core": "1.52",
+    "playwright-core": "1.54",
     "sst": "^3.17.10",
-    "zod": "^4.0.14"
+    "zod": "^4.0.17"
   },
   "devDependencies": {
-    "@playwright/test": "1.52",
+    "@playwright/test": "1.54",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/aws-lambda": "^8.10.152",
     "@types/bun": "^1.2.19",

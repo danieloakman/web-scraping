@@ -2,7 +2,7 @@ import { launchBrowser, launchBrowsers, newPage } from '../../utils/browser';
 import { lambdaFn } from '../../utils/api';
 import * as Z from 'zod';
 import Path from 'path';
-import { constant, sleep, type PromiseOrValue } from '@danoaky/js-utils';
+import { sleep, type PromiseOrValue } from '@danoaky/js-utils';
 import type { Browser, Page } from 'playwright-core';
 import type ExtendedIterator from 'iteragain/internal/ExtendedIterator';
 import { iter } from 'iteragain';
@@ -60,27 +60,6 @@ export class Location {
 	}
 }
 
-const clickNavigation = async (page: Page, textSearch: string, selector: string) => {
-	const elements = await page.$$(selector);
-	for (const element of elements) {
-		const text = await element.evaluate((el) => el.textContent);
-		if (text?.includes(textSearch)) {
-			// Check if element is still attached to the DOM and is clickable
-			const isAttached = await element.evaluate((el) => el.isConnected);
-			if (!isAttached) continue;
-			console.log(`${page.url()}, Clicking: "${text}"`);
-			return element
-				.click()
-				.then(constant(true))
-				.catch((err) => {
-					console.error(err);
-					return false;
-				});
-		}
-	}
-	return false;
-};
-
 async function isOnLoginPage(page: Page) {
 	const url = page.url();
 	return url.includes('login');
@@ -93,13 +72,17 @@ export async function getLocations(
 	await using page = await newPage(browser);
 	const url = Path.join(INSTAGRAM_LOCATION_URL, route);
 	await page.goto(url);
-	while (await clickNavigation(page, 'See more', 'a[href*="page"]')) {
+	const linkSelector = 'main li a[href*="explore/locations/"]';
+	await page.waitForSelector(linkSelector);
+	while ((await page.getByText('See more').count()) > 0) {
+		console.log(`${page.url()}, clicking see more`);
+		await page.getByText('See more').click();
 		await sleep(500);
 	}
 
 	if (await isOnLoginPage(page)) throw new Error('Login page detected');
 
-	const links = await page.$$('main li a[href*="explore/locations/"]');
+	const links = await page.$$(linkSelector);
 	const hrefs = await Promise.all(
 		links.map((link) => link.evaluate((el) => [el.getAttribute('href'), el.textContent] as const))
 	);
@@ -126,9 +109,12 @@ export async function getAllLocations(
 		regionSearchCountries?: string[];
 	} = {}
 ) {
-	await using browsers = await launchBrowsers(parallelBrowsers, { headless });
-	const browser0 = await browsers[0]!();
-	const locations = [...(await getLocations(browser0, INSTAGRAM_LOCATION_URL))];
+	await using browsers = launchBrowsers(parallelBrowsers, { headless });
+	const browser0 = await browsers[0]!().catch((err) => {
+		console.log(err);
+		throw new Error('Failed to launch browser');
+	});
+	const locations = [...(await getLocations(browser0))];
 	await Promise.all(
 		browsers.map(async (getBrowser, browserIdx) => {
 			const browser = await getBrowser();
@@ -138,15 +124,17 @@ export async function getAllLocations(
 				console.log(
 					`stack size: ${locations.length}, browser[${browserIdx}], goto: ${location.fullUrl}`
 				);
-				const result = await getLocations(browser, location.fullUrl);
+				const result = await getLocations(browser, location.url.join('/'));
 				await callback(
-					result.prepend([location]).tap((location) => {
-						if (
-							location.type === 'region' &&
-							regionSearchCountries.includes(location.parent?.id ?? '')
-						)
-							locations.push(location);
-					})
+					result
+						.tap((location) => {
+							if (
+								location.type === 'region' &&
+								regionSearchCountries.includes(location.parent?.id ?? '')
+							)
+								locations.push(location);
+						})
+						.prepend([location])
 				);
 			}
 		})
