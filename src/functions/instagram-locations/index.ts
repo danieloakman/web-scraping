@@ -67,7 +67,8 @@ async function isOnLoginPage(page: Page) {
 
 export async function getLocations(
 	browser: Browser,
-	route = ''
+	route = '',
+	{ retry = 2 }: { retry?: number } = {}
 ): Promise<ExtendedIterator<Location>> {
 	await using page = await newPage(browser);
 	const url = Path.join(INSTAGRAM_LOCATION_URL, route);
@@ -87,7 +88,13 @@ export async function getLocations(
 		await sleep(500);
 	}
 
-	if (await isOnLoginPage(page)) throw new Error('Login page detected');
+	if (await isOnLoginPage(page)) {
+		if (retry > 0) {
+			await sleep(1000);
+			return getLocations(browser, route, { retry: retry - 1 });
+		}
+		throw new Error(`Login page detected after ${retry} retries`);
+	}
 
 	const links = await page.$$(linkSelector).catch(constant([]));
 	const hrefs = await Promise.all(
