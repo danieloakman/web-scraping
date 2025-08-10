@@ -2,7 +2,7 @@ import { launchBrowser, launchBrowsers, newPage } from '../../utils/browser';
 import { lambdaFn } from '../../utils/api';
 import * as Z from 'zod';
 import Path from 'path';
-import { sleep, type PromiseOrValue } from '@danoaky/js-utils';
+import { constant, sleep, type PromiseOrValue } from '@danoaky/js-utils';
 import type { Browser, Page } from 'playwright-core';
 import type ExtendedIterator from 'iteragain/internal/ExtendedIterator';
 import { iter } from 'iteragain';
@@ -74,9 +74,18 @@ export async function getLocations(
 	await page.goto(url);
 	const linkSelector = 'main li a[href*="explore/locations/"]';
 	await page.waitForSelector(linkSelector);
-	while ((await page.getByText('See more').count()) > 0) {
+	while (
+		await page
+			.getByText('See more')
+			.count()
+			.then((count) => count > 0)
+			.catch(constant(false))
+	) {
 		console.log(`${page.url()}, clicking see more`);
-		await page.getByText('See more').click();
+		await page
+			.getByText('See more')
+			.click()
+			.catch(constant(null));
 		await sleep(500);
 	}
 
