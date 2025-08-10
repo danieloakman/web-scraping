@@ -2,7 +2,7 @@ import { launchBrowser, launchBrowsers, newPage } from '../../utils/browser';
 import { lambdaFn } from '../../utils/api';
 import * as Z from 'zod';
 import Path from 'path';
-import { constant, sleep, type PromiseOrValue } from '@danoaky/js-utils';
+import { attempt, constant, sleep, type PromiseOrValue } from '@danoaky/js-utils';
 import type { Browser, Page } from 'playwright-core';
 import type ExtendedIterator from 'iteragain/internal/ExtendedIterator';
 import { iter } from 'iteragain';
@@ -67,8 +67,7 @@ async function isOnLoginPage(page: Page) {
 
 export async function getLocations(
 	browser: Browser,
-	route = '',
-	{ retry = 2 }: { retry?: number } = {}
+	route = ''
 ): Promise<ExtendedIterator<Location>> {
 	await using page = await newPage(browser);
 	const url = Path.join(INSTAGRAM_LOCATION_URL, route);
@@ -88,13 +87,7 @@ export async function getLocations(
 		await sleep(500);
 	}
 
-	if (await isOnLoginPage(page)) {
-		if (retry > 0) {
-			await sleep(1000);
-			return getLocations(browser, route, { retry: retry - 1 });
-		}
-		throw new Error(`Login page detected after ${retry} retries`);
-	}
+	if (await isOnLoginPage(page)) throw new Error(`Login page detected`);
 
 	const links = await page.$$(linkSelector).catch(constant([]));
 	const hrefs = await Promise.all(
@@ -112,7 +105,8 @@ export async function getAllLocations(
 	{
 		headless = true,
 		parallelBrowsers = 1,
-		regionSearchCountries = []
+		regionSearchCountries = [],
+		retry = 2
 	}: {
 		headless?: boolean;
 		parallelBrowsers?: number;
@@ -121,6 +115,7 @@ export async function getAllLocations(
 		 * E.g. ['AU', 'NZ'] will only scrape regions within Australia and New Zealand.
 		 */
 		regionSearchCountries?: string[];
+		retry?: number;
 	} = {}
 ) {
 	await using browsers = launchBrowsers(parallelBrowsers, { headless });
@@ -128,17 +123,28 @@ export async function getAllLocations(
 		console.log(err);
 		throw new Error('Failed to launch browser');
 	});
-	const locations = [...(await getLocations(browser0))];
+	const locations = [
+		...(await getLocations(browser0)).map(
+			(location) => [location, retry] as [location: Location, retry: number]
+		)
+	];
 	await Promise.all(
 		browsers.map(async (getBrowser, browserIdx) => {
 			const browser = await getBrowser();
 			while (locations.length) {
-				const location = locations.pop();
-				if (!location) continue;
+				let value = locations.pop();
+				if (!value) continue;
+				const [location, retry] = value;
 				console.log(
 					`stack size: ${locations.length}, browser[${browserIdx}], goto: ${location.fullUrl}`
 				);
-				const result = await getLocations(browser, location.url.join('/'));
+				const { data: result, error } = await attempt(
+					getLocations(browser, location.url.join('/'))
+				);
+				if (error) {
+					locations.unshift([location, retry - 1]); // Put to the back of the queue
+					continue;
+				}
 				await callback(
 					result
 						.tap((location) => {
@@ -146,7 +152,7 @@ export async function getAllLocations(
 								location.type === 'region' &&
 								regionSearchCountries.includes(location.parent?.id ?? '')
 							)
-								locations.push(location);
+								locations.push([location, retry]);
 						})
 						.prepend([location])
 				);
