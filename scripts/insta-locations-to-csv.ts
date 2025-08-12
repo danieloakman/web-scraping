@@ -12,8 +12,8 @@ interface Writer {
 	[Symbol.asyncDispose](): Promise<void>;
 }
 
+// This writer actually finally ended up working to import into DynamoDB.
 export class DynamoDBJsonWriter implements Writer {
-	private isFirstLine = true;
 	protected constructor(
 		private readonly writer: Bun.FileSink,
 		private readonly schema: Z.ZodSchema
@@ -23,19 +23,16 @@ export class DynamoDBJsonWriter implements Writer {
 		const file = Bun.file(path);
 		if (await file.exists()) await file.delete();
 		const writer = file.writer();
-		writer.write('[');
 		return new DynamoDBJsonWriter(writer, schema);
 	}
 
 	async write(line: unknown) {
 		const data = marshall(this.schema.parse(line), { removeUndefinedValues: true });
-		this.writer.write((this.isFirstLine ? '\n' : ',\n') + JSON.stringify({ Item: data }));
-		this.isFirstLine = false;
+		this.writer.write(JSON.stringify({ Item: data }) + '\n');
 		await this.writer.flush();
 	}
 
 	async [Symbol.asyncDispose]() {
-		this.writer.write('\n]\n');
 		await this.writer.end();
 	}
 }
