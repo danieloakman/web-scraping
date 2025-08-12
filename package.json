@@ -25,6 +25,7 @@
     "zod": "^4.0.17"
   },
   "devDependencies": {
+    "@aws-sdk/util-dynamodb": "^3.864.0",
     "@playwright/test": "1.54",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/aws-lambda": "^8.10.152",

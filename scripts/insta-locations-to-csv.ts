@@ -4,6 +4,69 @@ import meow from 'meow';
 import Path from 'node:path';
 import { deferral } from '@danoaky/js-utils/disposables';
 import * as Z from 'zod';
+import { marshall } from '@aws-sdk/util-dynamodb';
+import { isObjectLike } from '@danoaky/js-utils';
+
+interface Writer {
+	write(line: unknown): Promise<void>;
+	[Symbol.asyncDispose](): Promise<void>;
+}
+
+export class DynamoDBJsonWriter implements Writer {
+	private isFirstLine = true;
+	protected constructor(
+		private readonly writer: Bun.FileSink,
+		private readonly schema: Z.ZodSchema
+	) {}
+
+	static async create(path: string, schema: Z.ZodSchema) {
+		const file = Bun.file(path);
+		if (await file.exists()) await file.delete();
+		const writer = file.writer();
+		writer.write('[');
+		return new DynamoDBJsonWriter(writer, schema);
+	}
+
+	async write(line: unknown) {
+		const data = marshall(this.schema.parse(line), { removeUndefinedValues: true });
+		this.writer.write((this.isFirstLine ? '\n' : ',\n') + JSON.stringify({ Item: data }));
+		this.isFirstLine = false;
+		await this.writer.flush();
+	}
+
+	async [Symbol.asyncDispose]() {
+		this.writer.write('\n]\n');
+		await this.writer.end();
+	}
+}
+
+export class CSVWriter implements Writer {
+	protected constructor(
+		private readonly writer: Bun.FileSink,
+		private readonly schema: Z.ZodSchema,
+		private readonly headers: string[],
+		private readonly delimiter = '\t'
+	) {}
+
+	static async create(path: string, schema: Z.ZodSchema, headers: string[], delimiter = '\t') {
+		const file = Bun.file(path);
+		if (await file.exists()) await file.delete();
+		const writer = file.writer();
+		writer.write(headers.join(delimiter) + '\n');
+		return new CSVWriter(writer, schema, headers, delimiter);
+	}
+
+	async write(line: unknown) {
+		const data = this.schema.parse(line);
+		if (!isObjectLike(data)) throw new Error('Expected object');
+		this.writer.write(this.headers.map((header) => data[header]).join(this.delimiter) + '\n');
+		await this.writer.flush();
+	}
+
+	async [Symbol.asyncDispose]() {
+		await this.writer.end();
+	}
+}
 
 const nthUrlPart = (str: string, n: number) => str.split('/')[n];
 const escapedQuoteRe = /"/g;
@@ -30,25 +93,11 @@ const locationSchema = Z.object({
 		.transform((str) => (str ? nthUrlPart(str, 0) : undefined))
 });
 
-export async function exportAsDynamoDBJson(db: Database, outputDir: string, delimiter = '\t') {
-	await using defer = deferral();
-	const filePath = Path.join(outputDir, `locations.csv`);
-	const file = Bun.file(filePath);
-	if (await file.exists()) await file.delete();
-	const writer = file.writer();
-	writer.write(`url${delimiter}name${delimiter}parent_url\n`);
-	defer(async () => {
-		await writer.end();
-	});
-
-	console.log(`Writing table "locations" to ${filePath}`);
+export async function exportLocations(db: Database, writer: Writer) {
 	let i = 0;
 	const logRow = () => console.log(`Wrote ${i} rows`);
 	for await (const row of db.query(`SELECT * FROM locations`)) {
-		const { data, error } = locationSchema.safeParse(row);
-		if (error) throw error;
-		writer.write([data.url, data.name, data.parent_url].join(delimiter) + '\n');
-		await writer.flush();
+		await writer.write(row);
 		i++;
 		if (i % 10000 === 0) logRow();
 	}
@@ -69,5 +118,15 @@ if (import.meta.main) {
 	const db = new Database(dbPath);
 	defer(() => db.close());
 
-	await exportAsDynamoDBJson(db, outputDir);
+	await using writer = await DynamoDBJsonWriter.create(
+		Path.join(outputDir, 'locations.json'),
+		locationSchema
+	);
+	// await using writer = await CSVWriter.create(
+	// 	Path.join(outputDir, 'locations.csv'),
+	// 	locationSchema,
+	// 	['url', 'name', 'parent_url'],
+	// 	'\t'
+	// );
+	await exportLocations(db, writer);
 }
