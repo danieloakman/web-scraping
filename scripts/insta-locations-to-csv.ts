@@ -4,19 +4,21 @@ import meow from 'meow';
 import Path from 'node:path';
 import { deferral } from '@danoaky/js-utils/disposables';
 import * as Z from 'zod';
-import { marshall } from '@aws-sdk/util-dynamodb';
 
 const nthUrlPart = (str: string, n: number) => str.split('/')[n];
 const escapedQuoteRe = /"/g;
+const nonAllowedCharsRe = /[^a-zA-Z0-9 '";:()&#@|/\-_+*,.?!]/g;
 
 const locationSchema = Z.object({
 	url: Z.string().transform((str) => nthUrlPart(str, 0)),
 	name: Z.string().transform((str) => {
 		let result = str
-			.replace(/[A-Z][^ ]/g, (m) => ' ' + m)
+			.replace(nonAllowedCharsRe, '')
+			.replace(/[a-z][A-Z][a-z]/g, (m) => m[0] + ' ' + m[1] + m[2])
 			.trim()
 			.replace(/ {2,}/g, ' ')
-			.replace(/\t|\\t/g, '');
+			.replace(/\t|\\t/g, '')
+			.replaceAll('’', `'`);
 		const numOfDoubleQuotes = result.match(escapedQuoteRe)?.length ?? 0;
 		if (numOfDoubleQuotes % 2 === 1) {
 			return result.replaceAll('"', `'`); // Swap these odd quotes to single apostrophes
