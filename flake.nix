@@ -19,12 +19,6 @@
       shellHook = ''
         export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
         export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
-
-        # Drop into zsh for interactive sessions only (does not affect --run)
-        export SHELL=${pkgs.zsh}/bin/zsh
-        if [[ $- == *i* ]]; then
-          exec "$SHELL"
-        fi
       '';
     }; in {
     devShells.${system}.default = shell;
