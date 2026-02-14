@@ -1,6 +1,8 @@
-import { type Browser, chromium as playwright, type LaunchOptions } from 'playwright-core';
+import { type Browser, chromium as playwright, type LaunchOptions, type Page, type Cookie, type BrowserContext } from 'playwright-core';
 import chromium from '@sparticuz/chromium';
-import { clamp, once } from '@danoaky/js-utils';
+import { attempt, clamp, once, Result } from '@danoaky/js-utils';
+import { readFile } from 'fs/promises';
+import * as Z from 'zod';
 
 async function launchOptions({
 	args = [],
@@ -64,11 +66,48 @@ export function launchBrowsers(
  * await using page = await newPage(browser);
  * ```
  */
-export async function newPage(browser: Browser) {
+export async function newPage(browser: Browser | BrowserContext) {
 	const page = await browser.newPage();
 	return Object.assign(page, {
 		[Symbol.asyncDispose]: async () => {
 			await page.close();
 		}
 	});
+}
+
+const SAME_SITE_MAP: Record<string, Cookie['sameSite']> = {
+	'lax': 'Lax',
+	'strict': 'Strict',
+	'none': 'None',
+	'unspecified': 'None',
+}
+
+export const cookiesSchema = Z.array(Z.object({
+	name: Z.string(),
+	value: Z.string(),
+	domain: Z.string(),
+	path: Z.string().default('/'),
+	expires: Z.number().default(Date.now() + 1000 * 60 * 60 * 24 * 30),
+	httpOnly: Z.boolean().default(false),
+	secure: Z.boolean().default(false),
+	sameSite: Z.string().transform((s, ctx) => {
+		const value = SAME_SITE_MAP[s];
+		if (!value) {
+			ctx.addIssue({
+				code: 'invalid_value',
+				values: Object.keys(SAME_SITE_MAP),
+				input: s,
+				continue: false,
+				message: 'Invalid sameSite value',
+			});
+			return Z.NEVER;
+		}
+		return value;
+	})
+}))
+
+export async function parseCookiesFile(path: string): Promise<Result<Cookie[], Error>> {
+	const content = await readFile(path, 'utf-8');
+	return attempt(() => cookiesSchema.parse(JSON.parse(content.trim())));
+
 }
