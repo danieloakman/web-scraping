@@ -80,6 +80,7 @@ const SAME_SITE_MAP: Record<string, Cookie['sameSite']> = {
 	'strict': 'Strict',
 	'none': 'None',
 	'unspecified': 'None',
+	'no_restriction': 'None',
 }
 
 export const cookiesSchema = Z.array(Z.object({
@@ -87,7 +88,8 @@ export const cookiesSchema = Z.array(Z.object({
 	value: Z.string(),
 	domain: Z.string(),
 	path: Z.string().default('/'),
-	expires: Z.number().default(Date.now() + 1000 * 60 * 60 * 24 * 30),
+	expires: Z.number().optional(),
+	expirationDate: Z.number().optional(),
 	httpOnly: Z.boolean().default(false),
 	secure: Z.boolean().default(false),
 	sameSite: Z.string().transform((s, ctx) => {
@@ -104,10 +106,16 @@ export const cookiesSchema = Z.array(Z.object({
 		}
 		return value;
 	})
-}))
+}).transform(({ expires, expirationDate, ...rest }) => ({
+	...rest,
+	// expires: Math.floor(expirationDate ?? expires ?? Date.now() + 1000 * 60 * 60 * 24 * 30),
+	expires: Math.floor(Date.now() / 1000 + 365 * 24 * 60 * 60), // unix timestamp in seconds, year from now
+})))
 
 export async function parseCookiesFile(path: string): Promise<Result<Cookie[], Error>> {
 	const content = await readFile(path, 'utf-8');
-	return attempt(() => cookiesSchema.parse(JSON.parse(content.trim())));
-
+	return attempt(() => {
+		const parsed = JSON.parse(content.trim());
+		return cookiesSchema.parse(parsed);
+	});
 }
