@@ -119,3 +119,219 @@ export async function parseCookiesFile(path: string): Promise<Result<Cookie[], E
 		return cookiesSchema.parse(parsed);
 	});
 }
+
+export async function passCaptcha(page: Page) {
+	// Check for Cloudflare challenge first
+	const cloudflareSelectors = [
+		'iframe[src*="challenges.cloudflare.com"]',
+		'iframe[src*="cloudflare"]',
+		'#challenge-stage',
+		'#challenge-container',
+		'[data-ray]', // Cloudflare challenge pages often have data-ray attributes
+	];
+
+	// Check for Cloudflare challenge indicators
+	let isCloudflareChallenge = false;
+	for (const selector of cloudflareSelectors) {
+		try {
+			const element = await page.$(selector);
+			if (element) {
+				isCloudflareChallenge = true;
+				break;
+			}
+		} catch (e) {
+			// Continue
+		}
+	}
+
+	// Also check for Cloudflare challenge text
+	if (!isCloudflareChallenge) {
+		const pageContent = await page.content();
+		if (pageContent.includes('Help us keep') && pageContent.includes('secure') &&
+			(pageContent.includes('_cf_chl_opt') || pageContent.includes('challenges.cloudflare.com'))) {
+			isCloudflareChallenge = true;
+		}
+	}
+
+	if (isCloudflareChallenge) {
+		// Try to find and click Cloudflare challenge checkbox/button
+		const cloudflareCheckboxSelectors = [
+			'iframe[src*="challenges.cloudflare.com"]',
+			'iframe[src*="turnstile"]',
+			'[data-sitekey]', // Turnstile widget
+			'.cf-turnstile',
+		];
+
+		let cloudflareFrame = null;
+		for (const selector of cloudflareCheckboxSelectors) {
+			try {
+				const frameElement = await page.$(selector);
+				if (frameElement) {
+					const frame = await frameElement.contentFrame();
+					if (frame) {
+						cloudflareFrame = frame;
+						break;
+					}
+				}
+			} catch (e) {
+				// Continue
+			}
+		}
+
+		// Try clicking in iframe first
+		if (cloudflareFrame) {
+			try {
+				const checkbox = await cloudflareFrame.$('input[type="checkbox"]') ||
+					await cloudflareFrame.$('[role="checkbox"]') ||
+					await cloudflareFrame.$('label');
+				if (checkbox) {
+					await checkbox.click();
+				}
+			} catch (e) {
+				// Continue to direct selectors
+			}
+		}
+
+		// Also try clicking directly on the challenge container
+		try {
+			const challengeContainer = await page.$('#ehurV4');
+			if (challengeContainer) {
+				// Look for clickable elements inside
+				const clickable = await challengeContainer.$('input[type="checkbox"], [role="checkbox"], button, label');
+				if (clickable) {
+					await clickable.click();
+				}
+			}
+		} catch (e) {
+			// Continue
+		}
+
+		// Wait for Cloudflare challenge to complete
+		// Look for success message or disappearance of challenge elements
+		try {
+			await page.waitForFunction(
+				() => {
+					// Check for success message (id contains "UwjU7" or similar)
+					const successElements = Array.from(document.querySelectorAll('[id]'));
+					const successMsg = successElements.find(el => {
+						const htmlEl = el as HTMLElement;
+						return el.textContent?.includes('Verification successful') ||
+							(el.textContent?.includes('Waiting for') && htmlEl.style.display !== 'none');
+					}) as HTMLElement | undefined;
+					if (successMsg && successMsg.style.display !== 'none') {
+						return true;
+					}
+					// Check if challenge container is gone or hidden
+					const challenge = document.querySelector('#ehurV4') as HTMLElement | null;
+					if (!challenge || challenge.style.display === 'none') {
+						return true;
+					}
+					// Check if loading spinner is gone
+					const loading = document.querySelector('#aulk2, .loading-verifying') as HTMLElement | null;
+					if (loading && (loading.style.display === 'none' || loading.style.visibility === 'hidden')) {
+						return true;
+					}
+					// Check if we're no longer on a challenge page (URL changed or challenge elements removed)
+					const challengeText = document.body.textContent || '';
+					if (!challengeText.includes('Help us keep') && !challengeText.includes('confirm you are human')) {
+						return true;
+					}
+					return false;
+				},
+				{ timeout: 60000 }
+			).catch(() => {
+				// Challenge might take longer or require manual intervention
+			});
+
+			// Wait a bit more for page to respond
+			await page.waitForTimeout(3000);
+			return;
+		} catch (e) {
+			// Continue to reCAPTCHA handling
+		}
+	}
+
+	// Common captcha checkbox selectors (primarily for reCAPTCHA)
+	const captchaSelectors = [
+		'iframe[src*="recaptcha"]',
+		'iframe[title*="reCAPTCHA"]',
+		'iframe[title*="recaptcha"]',
+		'.g-recaptcha iframe',
+		'#recaptcha iframe',
+	];
+
+	// Try to find a captcha iframe
+	let captchaFrame = null;
+	for (const selector of captchaSelectors) {
+		try {
+			const frameElement = await page.$(selector);
+			if (frameElement) {
+				const frame = await frameElement.contentFrame();
+				if (frame) {
+					captchaFrame = frame;
+					break;
+				}
+			}
+		} catch (e) {
+			// Continue to next selector
+		}
+	}
+
+	// If no iframe found, try direct checkbox selectors
+	if (!captchaFrame) {
+		const directSelectors = [
+			'#recaptcha-anchor',
+			'.recaptcha-checkbox',
+			'[aria-label*="recaptcha" i]',
+		];
+
+		for (const selector of directSelectors) {
+			try {
+				const checkbox = await page.$(selector);
+				if (checkbox) {
+					await checkbox.click();
+					// Wait for captcha to be resolved
+					await page.waitForFunction(
+						() => {
+							const anchor = document.querySelector('#recaptcha-anchor');
+							return anchor?.getAttribute('aria-checked') === 'true';
+						},
+						{ timeout: 30000 }
+					).catch(() => {
+						// If the function times out, the captcha might already be resolved
+					});
+					return;
+				}
+			} catch (e) {
+				// Continue to next selector
+			}
+		}
+
+		// No captcha found
+		return;
+	}
+
+	// Click the checkbox inside the iframe
+	try {
+		const checkbox = await captchaFrame.$('#recaptcha-anchor');
+		if (checkbox) {
+			await checkbox.click();
+
+			// Wait for the captcha to be resolved by checking the checkbox state in the frame
+			await captchaFrame.waitForFunction(
+				() => {
+					const anchor = document.querySelector('#recaptcha-anchor');
+					return anchor?.getAttribute('aria-checked') === 'true';
+				},
+				{ timeout: 30000 }
+			).catch(() => {
+				// If timeout, captcha might already be resolved or require manual intervention
+			});
+
+			// Additional wait to ensure any challenge popup is gone
+			await page.waitForTimeout(2000);
+		}
+	} catch (e) {
+		// Captcha checkbox not found or already resolved
+	}
+}
