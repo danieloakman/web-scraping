@@ -32,6 +32,8 @@
     "@types/bun": "^1.2.19",
     "@types/node": "^22",
     "chromium": "^3.0.3",
+    "drizzle-kit": "^0.31.9",
+    "drizzle-orm": "^0.45.1",
     "meow": "^13.2.0",
     "npm-check-updates": "^18.0.2",
     "prettier": "^3.6.2",
