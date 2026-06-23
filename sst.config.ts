@@ -35,9 +35,13 @@ export default $config({
 		// 	handler: 'src/functions/instagram-locations/index.handler',
 		// 	...DEFAULT_FUNCTION_OPTIONS
 		// });
-		new sst.aws.Function('webpage', {
+		const webpage = new sst.aws.Function('webpage', {
 			handler: 'src/functions/webpage/index.handler',
 			...DEFAULT_FUNCTION_OPTIONS
 		});
+
+		return {
+			webpageUrl: webpage.url
+		};
 	}
 });

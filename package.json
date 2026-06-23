@@ -11,6 +11,8 @@
     "dev": "sst dev",
     "format": "prettier --write ./src && eslint --fix ./src",
     "lint": "prettier --check ./src && eslint ./src",
+    "test": "bun test",
+    "test:dev": "bunx sst dev -- bun test",
     "remove": "sst remove --stage prod",
     "upgrade-interactive": "bunx npm-check-updates -i"
   },
