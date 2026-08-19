@@ -8,9 +8,7 @@ describe('Location', () => {
 		expect(location.place).toBe('united-states');
 		expect(location.name).toBe('United States');
 		expect(location.type).toBe('country');
-		expect(location.fullUrl).toBe(
-			'https://www.instagram.com/explore/locations/US/united-states'
-		);
+		expect(location.fullUrl).toBe('https://www.instagram.com/explore/locations/US/united-states');
 	});
 
 	it('parses a region location', () => {

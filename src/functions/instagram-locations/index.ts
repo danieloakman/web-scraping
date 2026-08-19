@@ -54,7 +54,7 @@ export class Location {
 			if (parts.length !== 2) throw new Error(`Invalid location url: ${url}`);
 			return parts as LocationUrl;
 		}
-		const { pathname } = new URL(`${INSTAGRAM_BASE_URL}/${url}`)
+		const { pathname } = new URL(`${INSTAGRAM_BASE_URL}/${url}`);
 		const parts = pathname.split('/').filter((s) => !!s && s !== 'explore' && s !== 'locations');
 		if (parts.length === 2) return parts as LocationUrl;
 		if (parts.length === 1) return [parts[0], ''] as LocationUrl;

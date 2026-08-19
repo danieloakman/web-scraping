@@ -31,17 +31,13 @@ function readResourceWebpageUrl(): string | undefined {
 
 /** Resolves the deployed SST webpage function URL when `sst dev` or `sst deploy` is active. */
 export function getWebpageEndpointUrl(): string | undefined {
-	return (
-		process.env.WEBPAGE_URL ?? readResourceWebpageUrl() ?? readOutputsWebpageUrl()
-	);
+	return process.env.WEBPAGE_URL ?? readResourceWebpageUrl() ?? readOutputsWebpageUrl();
 }
 
 export async function callWebpageEndpoint(url: string): Promise<string> {
 	const endpointUrl = getWebpageEndpointUrl();
 	if (!endpointUrl) {
-		throw new Error(
-			'Webpage endpoint URL is not available. Start `sst dev` or set WEBPAGE_URL.'
-		);
+		throw new Error('Webpage endpoint URL is not available. Start `sst dev` or set WEBPAGE_URL.');
 	}
 
 	const res = await fetch(endpointUrl, {

@@ -10,8 +10,8 @@ export default $config({
 		};
 	},
 	async run() {
-		/** Chromium v138 */
-		const CHROMIUM_LAYER = 'arn:aws:lambda:ap-southeast-2:345864471525:layer:chromium:3';
+		/** Chromium v149 */
+		const CHROMIUM_LAYER = 'arn:aws:lambda:ap-southeast-2:345864471525:layer:chromium:4';
 		const DEFAULT_FUNCTION_OPTIONS: Omit<sst.aws.FunctionArgs, 'handler'> = {
 			url: true,
 			memory: '2 GB',
