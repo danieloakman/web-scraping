@@ -11,6 +11,7 @@
     "dev": "sst dev",
     "format": "prettier --write ./src && eslint --fix ./src",
     "lint": "prettier --check ./src && eslint ./src",
+    "refresh": "sst refresh --stage prod",
     "test": "bun test",
     "test:dev": "bunx sst dev -- bun test",
     "remove": "sst remove --stage prod",
