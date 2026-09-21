@@ -6,6 +6,15 @@
 
 declare module "sst" {
   export interface Resource {
+    "InstagramLocationCache": {
+      "name": string
+      "type": "sst.aws.Dynamo"
+    }
+    "instagram-locations": {
+      "name": string
+      "type": "sst.aws.Function"
+      "url": string
+    }
     "webpage": {
       "name": string
       "type": "sst.aws.Function"

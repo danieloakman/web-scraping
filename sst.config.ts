@@ -30,18 +30,43 @@ export default $config({
 				}
 			}
 		};
-		// Using a local script instead of lambda fn for now:
-		// new sst.aws.Function('instagram-locations', {
-		// 	handler: 'src/functions/instagram-locations/index.handler',
-		// 	...DEFAULT_FUNCTION_OPTIONS
-		// });
+
+		const instagramLocationCache = new sst.aws.Dynamo('InstagramLocationCache', {
+			fields: {
+				query: 'string'
+			},
+			primaryIndex: { hashKey: 'query' },
+			ttl: 'expiresAt'
+		});
+
+		const instagramLocations = new sst.aws.Function('instagram-locations', {
+			handler: 'src/functions/instagram-locations/index.handler',
+			...DEFAULT_FUNCTION_OPTIONS,
+			timeout: '2 minutes',
+			link: [instagramLocationCache],
+			environment: {
+				...DEFAULT_FUNCTION_OPTIONS.environment,
+				/** Optional Instagram `sessionid` cookie for faster typeahead search. */
+				INSTAGRAM_SESSION_ID: process.env.INSTAGRAM_SESSION_ID ?? ''
+			},
+			nodejs: {
+				...DEFAULT_FUNCTION_OPTIONS.nodejs,
+				install: [
+					...(DEFAULT_FUNCTION_OPTIONS.nodejs?.install ?? []),
+					'@aws-sdk/client-dynamodb',
+					'@aws-sdk/lib-dynamodb'
+				]
+			}
+		});
+
 		const webpage = new sst.aws.Function('webpage', {
 			handler: 'src/functions/webpage/index.handler',
 			...DEFAULT_FUNCTION_OPTIONS
 		});
 
 		return {
-			webpageUrl: webpage.url
+			webpageUrl: webpage.url,
+			instagramLocationsUrl: instagramLocations.url
 		};
 	}
 });

@@ -19,6 +19,8 @@
   },
   "author": "Daniel Brown",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1131.0",
+    "@aws-sdk/lib-dynamodb": "^3.1131.0",
     "@danoaky/js-utils": "^0.31.1",
     "@sparticuz/chromium": "^149",
     "http-status-codes": "^2.3.0",

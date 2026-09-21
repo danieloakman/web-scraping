@@ -21,7 +21,7 @@ After upgrading SST major versions, run `bun run refresh` before `bun run deploy
 
 ## Calling functions
 
-Functions are exposed as HTTPS URLs (`url: true` in SST). After `bun run deploy` or `bun run dev`, the webpage URL is in `.sst/outputs.json` as `webpageUrl` (or set `WEBPAGE_URL`).
+Functions are exposed as HTTPS URLs (`url: true` in SST). After `bun run deploy` or `bun run dev`, URLs are in `.sst/outputs.json` (or set `WEBPAGE_URL` / `INSTAGRAM_LOCATIONS_URL`).
 
 ### `webpage`
 
@@ -54,4 +54,30 @@ const text = await callWebpageEndpoint('https://example.com');
 
 ### `instagram-locations`
 
-Not deployed as a Lambda right now (see `sst.config.ts`). Use the scripts under `scripts/` locally instead.
+Searches Instagram locations and returns matching places. Responses are cached in DynamoDB (7-day TTL).
+
+**Request:** `POST` with `{ "query": "Sydney NSW" }`
+
+```bash
+curl -sS -X POST "$INSTAGRAM_LOCATIONS_URL" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"Sydney NSW"}'
+```
+
+```ts
+const res = await fetch(process.env.INSTAGRAM_LOCATIONS_URL!, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: 'Sydney NSW' })
+});
+const locations = await res.json();
+```
+
+Include a country/region hint in the query when possible (`NSW`, `Australia`, `France`, …). Optionally set `INSTAGRAM_SESSION_ID` (Instagram `sessionid` cookie) before deploy for faster typeahead search.
+
+Or use the script:
+
+```bash
+bun run scripts/insta-locations-search.ts "Sydney NSW"
+bun run scripts/insta-locations-search.ts "Melbourne VIC" -o melbourne.json -n 5
+```
