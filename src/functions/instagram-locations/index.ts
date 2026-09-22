@@ -10,7 +10,8 @@ import { iter } from 'iteragain';
 
 const INSTAGRAM_BASE_URL = 'https://www.instagram.com';
 const INSTAGRAM_LOCATION_URL = `${INSTAGRAM_BASE_URL}/explore/locations`;
-const IG_APP_ID = '936619743392459';
+/** Bust old explore-pk shaped cache entries. */
+const CACHE_KEY_PREFIX = 'v2:';
 
 /** Maps query tokens → Instagram country location ids. */
 const COUNTRY_HINTS: Record<string, string> = {
@@ -33,13 +34,15 @@ const COUNTRY_HINTS: Record<string, string> = {
 
 export type LocationUrl = [id: string, place: string];
 
+/**
+ * Graph-publish candidate returned by the search API.
+ * `graphLocationId` is a Page-shaped digit id (length ≥ 12) — a heuristic, not a Graph guarantee.
+ */
 export type LocationResult = {
-	id: string;
-	place: string;
+	graphLocationId: string;
 	name: string;
-	type: Location['type'];
-	fullUrl: string;
-	parentUrl?: string;
+	parentName?: string;
+	fullUrl?: string;
 };
 
 export class Location {
@@ -78,14 +81,14 @@ export class Location {
 		return new Location(this.parentUrl, 'unknown', this.parentUrl);
 	}
 
-	toResult(): LocationResult {
+	/** Page-shaped digit ids only — never short explore pks or GeoNames `c…` ids. */
+	toGraphResult(parentName?: string): LocationResult | null {
+		if (!isGraphLocationCandidate(this.id)) return null;
 		return {
-			id: this.id,
-			place: this.place,
+			graphLocationId: this.id,
 			name: this.name,
-			type: this.type,
-			fullUrl: this.fullUrl,
-			...(this.parentUrl ? { parentUrl: this.parentUrl.join('/') } : {})
+			...(parentName ? { parentName } : {}),
+			fullUrl: this.fullUrl
 		};
 	}
 
@@ -104,12 +107,21 @@ export class Location {
 	}
 }
 
+/** Heuristic: digit length ≥ 12 looks Page-shaped for Graph `location_id`. Not a publish guarantee. */
+export function isGraphLocationCandidate(id: string): boolean {
+	return /^\d{12,}$/.test(id);
+}
+
 export function normalizeQuery(query: string): string {
 	return query
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, ' ')
 		.trim()
 		.replace(/\s+/g, ' ');
+}
+
+export function cacheKeyForQuery(query: string): string {
+	return `${CACHE_KEY_PREFIX}${normalizeQuery(query)}`;
 }
 
 export function tokenizeQuery(query: string): string[] {
@@ -166,6 +178,12 @@ function resolveCountryId(tokens: string[]): { countryId?: string; remaining: st
 	return countryId ? { countryId, remaining } : { remaining };
 }
 
+function toGraphResults(locations: Location[], parentName?: string): LocationResult[] {
+	return locations
+		.map((loc) => loc.toGraphResult(parentName))
+		.filter((loc): loc is LocationResult => loc != null);
+}
+
 async function isOnLoginPage(page: Page) {
 	const url = page.url();
 	return url.includes('login');
@@ -207,71 +225,8 @@ export async function getLocations(
 }
 
 /**
- * Authenticated Instagram typeahead search (places only).
- * Requires `INSTAGRAM_SESSION_ID` (browser `sessionid` cookie).
- */
-export async function searchLocationsTopsearch(
-	browser: Browser,
-	query: string
-): Promise<LocationResult[] | null> {
-	const sessionId = process.env.INSTAGRAM_SESSION_ID;
-	if (!sessionId) return null;
-
-	await using page = await newPage(browser);
-	await page.context().addCookies([
-		{
-			name: 'sessionid',
-			value: sessionId,
-			domain: '.instagram.com',
-			path: '/',
-			httpOnly: true,
-			secure: true
-		}
-	]);
-	await page.goto(INSTAGRAM_BASE_URL, { waitUntil: 'domcontentloaded' });
-
-	const payload = await page.evaluate(
-		async ({ q, appId }) => {
-			const url = `/api/v1/web/search/topsearch/?context=blended&query=${encodeURIComponent(q)}&include_reel=false&search_surface=web_top_search`;
-			const res = await fetch(url, {
-				headers: { 'x-ig-app-id': appId, accept: '*/*' },
-				credentials: 'include'
-			});
-			const text = await res.text();
-			return { status: res.status, text };
-		},
-		{ q: query, appId: IG_APP_ID }
-	);
-
-	if (payload.status !== 200) {
-		console.warn(`topsearch returned ${payload.status}: ${payload.text.slice(0, 200)}`);
-		return null;
-	}
-
-	const data = JSON.parse(payload.text) as {
-		places?: Array<{
-			place?: {
-				title?: string;
-				slug?: string;
-				location?: { pk?: string | number; name?: string };
-			};
-		}>;
-	};
-
-	return (data.places ?? [])
-		.map(({ place }) => {
-			const id = place?.location?.pk != null ? String(place.location.pk) : undefined;
-			const slug = place?.slug ?? '';
-			const name = place?.title ?? place?.location?.name;
-			if (!id || !name) return null;
-			return Location.from(`${id}/${slug || id}`, name).toResult();
-		})
-		.filter((loc): loc is LocationResult => loc != null);
-}
-
-/**
  * Public directory scrape: resolve country → city/region → places for a free-text query.
- * Works without login. Best with a country/region hint (e.g. "Sydney NSW", "Paris France").
+ * Hard-filters to Page-shaped digit ids (≥12). Requires a country/region hint.
  */
 export async function searchLocationsDirectory(
 	browser: Browser,
@@ -292,7 +247,7 @@ export async function searchLocationsDirectory(
 
 	if (!country) {
 		throw new Error(
-			`Could not resolve a country from query "${query}". Include a country or region hint (e.g. "Sydney NSW" or "Paris France"), or set INSTAGRAM_SESSION_ID for typeahead search.`
+			`Could not resolve a country from query "${query}". Include a country or region hint (e.g. "Sydney NSW" or "QLD surfers paradise").`
 		);
 	}
 
@@ -306,9 +261,10 @@ export async function searchLocationsDirectory(
 
 	const best = ranked[0]?.c;
 	if (!best) {
-		return children
-			.filter((c) => placeTokens.every((t) => tokenMatchesLocation(c, t)))
-			.map((c) => c.toResult());
+		return toGraphResults(
+			children.filter((c) => placeTokens.every((t) => tokenMatchesLocation(c, t))),
+			country.name
+		);
 	}
 
 	// City/region pages list concrete Instagram places underneath.
@@ -316,22 +272,26 @@ export async function searchLocationsDirectory(
 		const places = [...(await getLocations(browser, best.url.join('/')))];
 		const filtered = placeTokens.length
 			? places.filter((p) => {
-					// Keep all children of a strongly matched city (e.g. Sydney); only
-					// re-filter when multiple place tokens remain beyond the city name.
 					const unmatched = placeTokens.filter((t) => !tokenMatchesLocation(best, t));
 					if (!unmatched.length) return true;
 					return unmatched.every((t) => tokenMatchesLocation(p, t));
 				})
 			: places;
-		return [best.toResult(), ...filtered.map((p) => p.toResult())];
+		const results = toGraphResults(filtered, best.name);
+		return results.sort(
+			(a, b) =>
+				scoreLocation(Location.from(`${b.graphLocationId}/x`, b.name), placeTokens) -
+				scoreLocation(Location.from(`${a.graphLocationId}/x`, a.name), placeTokens)
+		);
 	}
 
-	return ranked.map(({ c }) => c.toResult());
+	return toGraphResults(
+		ranked.map(({ c }) => c),
+		country.name
+	);
 }
 
 export async function searchLocations(browser: Browser, query: string): Promise<LocationResult[]> {
-	const fromTopsearch = await searchLocationsTopsearch(browser, query);
-	if (fromTopsearch?.length) return fromTopsearch;
 	return searchLocationsDirectory(browser, query);
 }
 
@@ -346,8 +306,8 @@ export async function getAllLocations(
 		headless?: boolean;
 		parallelBrowsers?: number;
 		/**
-		 * If provided, only regions within the provided countries will be scraped.
-		 * E.g. ['AU', 'NZ'] will only scrape regions within Australia and New Zealand.
+		 * If provided, only these countries (and their regions) are scraped.
+		 * E.g. ['AU', 'NZ'] skips every other country entirely.
 		 */
 		regionSearchCountries?: string[];
 		retry?: number;
@@ -358,8 +318,18 @@ export async function getAllLocations(
 		console.log(err);
 		throw new Error('Failed to launch browser');
 	});
+	const allCountries = await getLocations(browser0);
+	const seedCountries =
+		regionSearchCountries.length > 0
+			? allCountries.filter((location) => regionSearchCountries.includes(location.id))
+			: allCountries;
+	if (regionSearchCountries.length > 0 && seedCountries.length === 0) {
+		throw new Error(
+			`No countries matched regionSearchCountries: ${regionSearchCountries.join(', ')}`
+		);
+	}
 	const locations = [
-		...(await getLocations(browser0)).map(
+		...seedCountries.map(
 			(location) => [location, retry] as [location: Location, retry: number]
 		)
 	];
@@ -403,7 +373,7 @@ export const api = lambdaFn(
 			.meta({ description: 'Free-text location search, e.g. "Sydney NSW".' })
 	}),
 	async ({ query }) => {
-		const cacheKey = normalizeQuery(query);
+		const cacheKey = cacheKeyForQuery(query);
 		const cached = await cacheGet<LocationResult[]>(cacheKey);
 		if (cached) {
 			console.log(`cache hit: ${cacheKey}`);

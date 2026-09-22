@@ -70,7 +70,10 @@ const escapedQuoteRe = /"/g;
 const nonAllowedCharsRe = /[^a-zA-Z0-9 '";:()&#@|/\-_+*,.?!]/g;
 
 const locationSchema = Z.object({
-	url: Z.string().transform((str) => nthUrlPart(str, 0)),
+	// Normalized schema stores id/parent_id; legacy DBs used url/parent_url with optional slug.
+	url: Z.union([Z.string(), Z.number()]).transform((val) =>
+		typeof val === 'number' ? String(val) : (nthUrlPart(val, 0) ?? val)
+	),
 	name: Z.string().transform((str) => {
 		let result = str
 			.replace(nonAllowedCharsRe, '')
@@ -87,13 +90,16 @@ const locationSchema = Z.object({
 	}),
 	parent_url: Z.string()
 		.nullish()
-		.transform((str) => (str ? nthUrlPart(str, 0) : undefined))
+		.transform((str) => (str ? (nthUrlPart(str, 0) ?? str) : undefined))
 });
 
 export async function exportLocations(db: Database, writer: Writer) {
 	let i = 0;
 	const logRow = () => console.log(`Wrote ${i} rows`);
-	for await (const row of db.query(`SELECT * FROM locations`)) {
+	const rows = db.query(`
+		SELECT id AS url, name, parent_id AS parent_url FROM locations
+	`);
+	for await (const row of rows) {
 		await writer.write(row);
 		i++;
 		if (i % 10000 === 0) logRow();

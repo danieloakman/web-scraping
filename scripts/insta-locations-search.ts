@@ -11,9 +11,12 @@ if (import.meta.main) {
     Usage
       $ bun run scripts/insta-locations-search.ts <query>
 
+    Returns Graph location_id candidates only (digit id length ≥ 12).
+    Include a country/region hint (e.g. NSW, QLD, Australia).
+
     Examples
       $ bun run scripts/insta-locations-search.ts "Sydney NSW"
-      $ bun run scripts/insta-locations-search.ts "Melbourne VIC" -o melbourne.json
+      $ bun run scripts/insta-locations-search.ts "QLD surfers paradise" -o surfers.json -n 5
 
     Options
       --output, -o  Write full JSON results to a file (also prints a short summary)

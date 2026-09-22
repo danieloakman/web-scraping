@@ -54,9 +54,11 @@ const text = await callWebpageEndpoint('https://example.com');
 
 ### `instagram-locations`
 
-Searches Instagram locations and returns matching places. Responses are cached in DynamoDB (7-day TTL).
+Searches Instagram explore locations and returns **Graph `location_id` candidates** only (digit ids with length ≥ 12). Short explore `pk`s and GeoNames `c…` ids are hard-filtered out. Length is a heuristic, not a Graph publish guarantee. Responses are cached in DynamoDB (7-day TTL).
 
 **Request:** `POST` with `{ "query": "Sydney NSW" }`
+
+Include a **country/region hint** (`NSW`, `QLD`, `Australia`, …) — required for directory scrape.
 
 ```bash
 curl -sS -X POST "$INSTAGRAM_LOCATIONS_URL" \
@@ -70,10 +72,13 @@ const res = await fetch(process.env.INSTAGRAM_LOCATIONS_URL!, {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ query: 'Sydney NSW' })
 });
-const locations = await res.json();
+const locations: Array<{
+  graphLocationId: string;
+  name: string;
+  parentName?: string;
+  fullUrl?: string;
+}> = await res.json();
 ```
-
-Include a country/region hint in the query when possible (`NSW`, `Australia`, `France`, …). Optionally set `INSTAGRAM_SESSION_ID` (Instagram `sessionid` cookie) before deploy for faster typeahead search.
 
 Or use the script:
 
@@ -81,3 +86,5 @@ Or use the script:
 bun run scripts/insta-locations-search.ts "Sydney NSW"
 bun run scripts/insta-locations-search.ts "Melbourne VIC" -o melbourne.json -n 5
 ```
+
+See [docs/instagram-location-ids-graph-publish.md](docs/instagram-location-ids-graph-publish.md) for Graph publish context.

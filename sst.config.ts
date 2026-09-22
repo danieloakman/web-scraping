@@ -44,11 +44,6 @@ export default $config({
 			...DEFAULT_FUNCTION_OPTIONS,
 			timeout: '2 minutes',
 			link: [instagramLocationCache],
-			environment: {
-				...DEFAULT_FUNCTION_OPTIONS.environment,
-				/** Optional Instagram `sessionid` cookie for faster typeahead search. */
-				INSTAGRAM_SESSION_ID: process.env.INSTAGRAM_SESSION_ID ?? ''
-			},
 			nodejs: {
 				...DEFAULT_FUNCTION_OPTIONS.nodejs,
 				install: [

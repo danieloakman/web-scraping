@@ -2,23 +2,19 @@
 import { Database } from 'bun:sqlite';
 import Path from 'node:path';
 import meow from 'meow';
-import { getAllLocations, Location } from '../src/functions/instagram-locations';
+import {
+	getAllLocations,
+	isGraphLocationCandidate,
+	Location
+} from '../src/functions/instagram-locations';
 import { deferral } from '@danoaky/js-utils/disposables';
 
 class LocationRow {
 	constructor(
-		public readonly url: string,
+		public readonly id: number | bigint | string,
 		public readonly name: string,
-		public readonly parent_url: string | null
+		public readonly parent_id: string | null
 	) {}
-
-	static from(location: Location) {
-		return new LocationRow(
-			location.url.join('/'),
-			location.name,
-			location.parentUrl?.join('/') ?? null
-		);
-	}
 }
 
 if (import.meta.main) {
@@ -27,12 +23,16 @@ if (import.meta.main) {
 	} = meow(
 		`
     Usage
-    $ bun run packages/web-scraping/scripts/insta-locations-sqlite.ts
+      $ bun run scripts/insta-locations-sqlite.ts
+
+    Writes only Graph-candidate locations (digit id length ≥ 12).
+    Parents (GeoNames cities) live in a separate table; locations store
+    integer Graph ids + optional parent_id FK. Currently seeds from AU only.
 
     Options
-    --output, -o  Output file (default: ./locations.sqlite)
-    --headless, -H  Run in headless mode (default: false)
-    --parallel-browsers, -p  Number of parallel browsers to use (default: 1)
+      --output, -o  Output file (default: ./locations.sqlite)
+      --headless, -H  Run in headless mode (default: false)
+      --parallel-browsers, -p  Number of parallel browsers to use (default: 1)
   `,
 		{
 			importMeta: import.meta,
@@ -61,33 +61,49 @@ if (import.meta.main) {
 	defer(() => db.close());
 	db.exec(`
     PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE IF NOT EXISTS parents (
+      id   TEXT PRIMARY KEY,
+      name TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS locations (
-      url TEXT PRIMARY KEY UNIQUE,
-      name TEXT,
-      parent_url TEXT NULL
-    )
+      id        INTEGER PRIMARY KEY,
+      name      TEXT NOT NULL,
+      parent_id TEXT REFERENCES parents(id)
+    );
+    CREATE INDEX IF NOT EXISTS locations_parent_id ON locations(parent_id);
   `);
-	const insertStmt = db.prepare('INSERT INTO locations (url, name, parent_url) VALUES (?, ?, ?)');
-	const existsStmt = db.prepare('SELECT * FROM locations WHERE url = ?').as(LocationRow);
+	const upsertParentStmt = db.prepare(
+		'INSERT INTO parents (id, name) VALUES (?, ?) ON CONFLICT(id) DO NOTHING'
+	);
+	const insertStmt = db.prepare(
+		'INSERT INTO locations (id, name, parent_id) VALUES (?, ?, ?)'
+	);
+	const existsStmt = db.prepare('SELECT * FROM locations WHERE id = ?').as(LocationRow);
 	defer(() => {
+		upsertParentStmt.finalize();
 		insertStmt.finalize();
 		existsStmt.finalize();
 	});
+
 	const insertMany = db.transaction((locations: Location[]) => {
 		for (const location of locations) {
-			const asRow = LocationRow.from(location);
-			const exists = existsStmt.get(asRow.url);
-			if (exists) {
-				if (exists.url !== asRow.url)
-					throw new Error(
-						`Location ${location.id} already exists with different url: ${exists.url} -> ${asRow.url}`
-					);
-				continue;
+			if (!isGraphLocationCandidate(location.id)) continue;
+
+			// Bind as digit string so SQLite stores a full INTEGER64 without JS Number precision loss.
+			const exists = existsStmt.get(location.id);
+			if (exists) continue;
+
+			let parentId: string | null = null;
+			if (location.parentUrl) {
+				parentId = location.parentUrl[0];
+				const parentName = location.parentUrl[1] || parentId;
+				upsertParentStmt.run(parentId, parentName);
 			}
-			insertStmt.run(asRow.url, asRow.name, asRow.parent_url);
+
+			insertStmt.run(location.id, location.name, parentId);
 		}
 	});
-	// const searchStmt = db.prepare('SELECT url FROM locations WHERE url LIKE ?');
 
 	await getAllLocations(
 		async (locations) => {

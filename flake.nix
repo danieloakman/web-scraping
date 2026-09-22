@@ -15,6 +15,7 @@
         bun
         nodejs_24
         playwright-driver
+        sqlite
       ];
       shellHook = ''
         export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
