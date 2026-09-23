@@ -90,14 +90,21 @@ const locationSchema = Z.object({
 	}),
 	parent_url: Z.string()
 		.nullish()
-		.transform((str) => (str ? (nthUrlPart(str, 0) ?? str) : undefined))
+		.transform((str) => (str ? (nthUrlPart(str, 0) ?? str) : undefined)),
+	country: Z.string().nullish().transform((str) => str || undefined)
 });
 
 export async function exportLocations(db: Database, writer: Writer) {
 	let i = 0;
 	const logRow = () => console.log(`Wrote ${i} rows`);
 	const rows = db.query(`
-		SELECT id AS url, name, parent_id AS parent_url FROM locations
+		SELECT
+			locations.id AS url,
+			locations.name,
+			locations.parent_id AS parent_url,
+			parents.country AS country
+		FROM locations
+		LEFT JOIN parents ON parents.id = locations.parent_id
 	`);
 	for await (const row of rows) {
 		await writer.write(row);
